@@ -1,6 +1,5 @@
 # Sports Facility Booking System
 
-Modular Monolith -> Microservices Ready Architecture
 
 ---
 
@@ -212,3 +211,21 @@ Concurrency is enforced at database level.
 CREATE UNIQUE INDEX ux_booking_item_slot_date_active
 ON booking_item (court_id, slot_definition_id, booking_date)
 WHERE status IN ('HELD','CONFIRMED');
+
+
+## Validation Strategy
+   Structural Validation
+
+   Implemented using Notification Pattern
+
+   Returns HTTP 400
+
+   Business Validation
+
+   FacilityAlreadyExists
+
+   CourtAlreadyExists
+
+   SlotAlreadyBooked
+
+   Returns HTTP 409
