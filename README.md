@@ -213,19 +213,31 @@ ON booking_item (court_id, slot_definition_id, booking_date)
 WHERE status IN ('HELD','CONFIRMED');
 
 
-## Validation Strategy
-   Structural Validation
+---
 
-   Implemented using Notification Pattern
+# Tech Stack
 
-   Returns HTTP 400
+## Backend
+- Java 21
+- Spring Boot
+- Spring JDBC
 
-   Business Validation
+## Database
+- PostgreSQL
 
-   FacilityAlreadyExists
+## Search & Indexing
+- Elasticsearch
 
-   CourtAlreadyExists
+## Messaging (Planned)
+- Apache Kafka
 
-   SlotAlreadyBooked
+## DevOps & Deployment
+- Docker
 
-   Returns HTTP 409
+## Database Migration
+- Flyway
+- Liquibase
+
+---
+
+
