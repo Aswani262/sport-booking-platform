@@ -215,29 +215,4 @@ WHERE status IN ('HELD','CONFIRMED');
 
 ---
 
-# Tech Stack
-
-## Backend
-- Java 21
-- Spring Boot
-- Spring JDBC
-
-## Database
-- PostgreSQL
-
-## Search & Indexing
-- Elasticsearch
-
-## Messaging (Planned)
-- Apache Kafka
-
-## DevOps & Deployment
-- Docker
-
-## Database Migration
-- Flyway
-- Liquibase
-
----
-
 
