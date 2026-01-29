@@ -1,451 +1,464 @@
-1) Booking Microservice
-1.1 Responsibilities
+🏟️ Sports Facility Booking System
 
-The Booking service is the transactional and concurrency-critical service. It owns:
+Modular Monolith → Microservices Ready Architecture
 
-Creating a booking (single/multiple slots)
+📌 Overview
 
-Reserving slots with HOLD
+This project implements a Sports Facility Booking Platform designed using:
 
-Confirming booking after payment
+Domain-Driven Design (DDD)
 
-Expiring unpaid holds automatically (scheduler)
+Hexagonal Architecture (Ports & Adapters)
 
-Ensuring no double booking under high concurrency
+CQRS (Command & Query Separation)
 
-Storing audit-safe price snapshots per booked slot (priceRuleId, finalPrice)
+Notification Pattern for validation
 
-Core Entities (from your model)
+Centralized Exception Handling
 
-Booking (aggregate root): bookingId, userId, facilityId, courtId, bookingDate, status, holdExpiresAt, totalAmount, currency
+Database-level concurrency control
 
-BookingItem (reservation rows): bookingId, courtId, slotDefinitionId, bookingDate, status, priceRuleId, finalPrice
+Microservices-ready modular monolith design
 
-1.2 Booking Flow (End-to-End)
-Step A — User discovers facilities (search)
+The system is structured so that each module can be extracted into an independent microservice with minimal refactoring.
 
-User logs in
+🧩 Domain Decomposition (DDD)
 
-UI calls Facility service to fetch nearest facilities based on user location
+The system is decomposed into three subdomains, each mapped to a module (future microservice):
 
-Facility service uses Elasticsearch for fast geo + text queries
+Subdomain	Microservice	Reason
+Facility	Facility Service	Inventory management
+Pricing & Slots	Pricing Service	High-frequency configuration changes
+Booking	Booking Service	High-concurrency transactional core
+🏗️ Architecture Style
+Hexagonal Architecture (Clean Architecture)
 
-Facility Service APIs used:
+Each service follows:
 
-GET /v1/api/facilities/nearby?lat={lat}&lon={lon}&radiusKm={km}&sportType={sport}
+API Layer (Controllers)
+        ↓
+Application Layer (UseCases / CommandHandlers / QueryHandlers)
+        ↓
+Domain Layer (Entities, Domain Services, Business Rules)
+        ↓
+Adapters (Repositories, Integration Services, Kafka, HTTP)
 
-GET /v1/api/facilities/search?q={text}&sportType={sport}
+Custom Stereotype Layers
+Annotation	Responsibility
+@ApplicationService	Orchestrates use cases, transactions
+@DomainService	Business rules & invariants
+@IntegrationService	Cross-module/service communication
+@UtilityService	Stateless helpers
+@EventService	Event publishing/consuming (future Kafka)
+🔹 1) Facility Microservice
+🎯 Responsibilities
 
-Step B — User selects facility & court
+Manage facilities
 
-Once user selects a facility:
+Manage courts
 
-UI fetches courts of that facility
+Geo-based discovery
 
-Facility Service APIs used:
+Sport-based filtering
 
-GET /v1/api/facilities/{facilityId}
+High-performance search (Elasticsearch)
 
-GET /v1/api/facilities/{facilityId}/courts
+📦 Core Entities
+Facility
 
-Step C — UI loads available slots + pricing for a court on a date
+facilityId
 
-Availability is computed from:
+ownerUserId
 
-SlotDefinition (template slots)
+name
 
-PricingPlan (pricing linked to each slot definition)
+address
 
-BookingItem (already HELD/CONFIRMED reservations)
+latitude, longitude
 
-Pricing & Slots Service APIs used:
+sportTypeSupported
 
+openingTime, closingTime
+
+facilityStatus
+
+Court
+
+courtId
+
+facilityId
+
+sport
+
+minBookingMinutes
+
+openingTime, closingTime
+
+courtStatus
+
+🌍 Search Optimization
+Indexes Used
+
+GIN index on sportTypeSupported
+
+GiST PostGIS index on geo-location
+
+B-tree on city, status, owner
+
+Elasticsearch Used For
+
+Facility name search
+
+Sport type filtering
+
+Geo-radius search
+
+🌐 Facility APIs
+API	Method	Description
+/v1/api/facilities	POST	Register facility
+/v1/api/facilities/{id}	GET	Get facility details
+/v1/api/facilities/{id}/courts	GET	List courts
+/v1/api/facilities/nearby	GET	Geo search
+/v1/api/facilities/search	GET	Name/sport search
+🔹 2) Pricing & Slot Microservice
+🎯 Responsibilities
+
+Define pricing rules
+
+Define slot templates
+
+Versioning of slots and pricing
+
+Provide slot availability & pricing
+
+📦 Core Entities
+PricingPlan
+
+pricingPlanId
+
+courtId
+
+validFrom, validTo
+
+dayOfWeek, startTime, endTime
+
+pricePerUnit
+
+planType (STANDARD / PEAK)
+
+priority
+
+active
+
+Pricing plans are immutable. Updates create a new version.
+
+SlotDefinition
+
+slotDefinitionId
+
+courtId
+
+dayOfWeek / dayType
+
+startTime, endTime
+
+effectiveFrom, effectiveTo
+
+pricePlanId
+
+active, replacedBySlotDefId
+
+Slots are templates. Updates create new slot versions.
+
+💰 Pricing Types Supported
+Type	Behavior
+Fixed	Fixed price per slot
+Unit-based	Price per minBookingMinutes unit
+Peak	Higher priority time window
+Weekend	Day-based pricing
+🧮 Slot Availability API
+API
 GET /v1/api/slots/availability?courtId={courtId}&date={yyyy-mm-dd}
 
-returns list of slot DTOs with pricing and availability status
+Availability Logic
 
-How availability is derived:
+Load SlotDefinitions active for date
 
-Fetch all active SlotDefinitions effective for that date
+Join PricingPlan
 
-Mark a slot as unavailable if a booking_item exists for (court_id, slot_definition_id, booking_date) with status in HELD/CONFIRMED
+Mark unavailable if BookingItem exists with HELD/CONFIRMED
 
-Availability query logic (conceptual):
+🔹 3) Booking Microservice (Transactional Core)
+🎯 Responsibilities
 
-Available = slot_definition exists AND no booking_item row exists for that slot/date in HELD/CONFIRMED
+Slot booking (single/multiple)
 
-Step D — User selects one/multiple slots and books
+Payment hold & confirmation
 
-UI sends slot ids to Booking service.
+Auto expiry scheduler
 
-Booking API:
+Concurrency control
 
+Price snapshot auditing
+
+📦 Core Entities
+Booking (Aggregate Root)
+
+bookingId
+
+userId
+
+facilityId
+
+courtId
+
+bookingDate
+
+status
+
+holdExpiresAt
+
+totalAmount
+
+currency
+
+BookingItem (Slot Reservation Row)
+
+bookingItemId
+
+slotDefinitionId
+
+bookingDate
+
+status
+
+priceRuleId
+
+finalPrice
+
+🔄 Booking Flow (End-to-End)
+1️⃣ Facility Discovery
+
+User logs in → UI calls Facility Service:
+
+GET /v1/api/facilities/nearby
+GET /v1/api/facilities/search
+
+2️⃣ Court Selection
+GET /v1/api/facilities/{facilityId}/courts
+
+3️⃣ Slot & Pricing Load
+GET /v1/api/slots/availability?courtId={courtId}&date={date}
+
+4️⃣ Booking Slots (HOLD)
 POST /v1/api/bookings/book-court-slot
 
-Request:
+Booking Steps
 
-{
-  "userId": "...",
-  "facilityId": "...",
-  "courtId": "...",
-  "bookingDate": "2026-02-01",
-  "slotDefinitionIds": ["...", "..."],
-  "holdMinutes": 10,
-  "currency": "INR"
-}
+Structural validation (Notification Pattern)
 
+PricingIntegrationService loads slot pricing
 
-What Booking service does:
+Total price calculated
 
-Validate request using Notification Pattern (structural validation)
+Booking + BookingItems inserted as HELD
 
-Calls Pricing service (integration) to load pricing for selected slots
+Booking status = PAYMENT_PENDING
 
-Calculates total and generates Booking + BookingItems
+holdExpiresAt = now + 10 minutes
 
-Inserts BookingItems as HELD
-
-Booking status becomes PAYMENT_PENDING
-
-Returns bookingId to UI
-
-Step E — Payment flow
-
-After booking is placed on HOLD:
-
-UI redirects user to payment
-
-Payment provider returns success/fail to booking service
-
-Booking APIs:
-
+5️⃣ Payment Confirmation
 POST /v1/api/bookings/{bookingId}/payment/success
-
 POST /v1/api/bookings/{bookingId}/payment/fail
 
-On success:
+Success
 
-Booking: PAYMENT_PENDING → CONFIRMED
+Booking → CONFIRMED
 
-BookingItem: HELD → CONFIRMED
+BookingItems → CONFIRMED
 
-On failure:
+Failure
 
-Booking: PAYMENT_PENDING → CANCELLED
+Booking → CANCELLED
 
-BookingItem: HELD → CANCELLED
+BookingItems → CANCELLED
 
-1.3 HOLD Expiry Scheduler (runs every 1 minute)
+6️⃣ HOLD Expiry Scheduler (Every 1 Minute)
 
-A scheduler runs every minute:
+Finds PAYMENT_PENDING bookings where holdExpiresAt < now
 
-Finds PAYMENT_PENDING bookings where hold_expires_at < now()
+Marks Booking → EXPIRED
 
-Marks booking as EXPIRED
+Marks BookingItems → EXPIRED
 
-Marks all items HELD → EXPIRED
-This releases the slot for future bookings.
+This releases slots automatically.
 
-Booking Scheduler job:
+⚔️ Handling Concurrent Booking (CRITICAL)
 
-every 1 minute
+Concurrency is enforced at database level.
 
-action: expire holds
-
-1.4 Handling Concurrent Booking (CRITICAL)
-How concurrency is guaranteed
-
-Concurrency is enforced at database level, not application logic.
-
-We prevent double booking using a unique partial index on booking_item:
-
-✅ Index you asked to add:
-
+Unique Partial Index (Prevents Double Booking)
 CREATE UNIQUE INDEX ux_booking_item_slot_date_active
 ON booking_item (court_id, slot_definition_id, booking_date)
 WHERE status IN ('HELD','CONFIRMED');
 
-Why this works
+Why This Works
 
-If two users try to reserve same slot at same time:
+Two users book same slot → one insert fails
 
-one insert succeeds
+Booking service catches exception → returns slot_already_booked
 
-second insert fails with DuplicateKeyException
+No race condition possible (even with 100 instances)
 
-Booking service catches it and returns business error:
+🧪 Validation Strategy
+1) Structural Validation (Notification Pattern)
 
-slot_already_booked (HTTP 409)
+Missing fields
 
-This guarantees correctness even under:
+Invalid formats
 
-high traffic
+Time range invalid
 
-parallel requests
+➡ Returns 400 Bad Request
 
-retries
+2) Business Validation (Domain Rules)
 
-multiple app instances
+Examples:
 
-2) Pricing & Slot Microservice
-2.1 Responsibilities
+FacilityAlreadyExists
 
-This service manages all time and pricing rules for courts, optimized for frequent admin updates.
+CourtAlreadyExists
 
-It owns:
+SlotAlreadyBooked
 
-Pricing Plan rules (PricingPlan)
+➡ Throws typed exceptions → 409 Conflict
 
-Slot Definitions (SlotDefinition)
+🧯 Centralized Exception Handling
 
-Slot availability query (derived with booking reservations)
+All services use @RestControllerAdvice to return consistent error envelope:
 
-Versioning strategy: immutable pricing plans and slot definitions (new version instead of updates)
+{
+  "code": "slot_already_booked",
+  "message": "Slot already booked for date",
+  "timestamp": "...",
+  "details": []
+}
 
-Core Entities (from your model)
-PricingPlan
+📡 Service-to-Service Communication
+Caller	Calls	Via
+Booking → Pricing	Slot pricing	IntegrationService
+Booking → Facility	Court validation	IntegrationService
+Facility → Search	Elasticsearch	Adapter
 
-Key fields:
+In future microservices, IntegrationService becomes REST/Kafka client.
 
-pricingPlanId, facilityId, courtId, name, currency, active
+🧠 Key Design Decisions
+Immutable Pricing & Slots
 
-validFrom, validTo
+Updates create new versions
 
-optional filters: dayOfWeek, startTime, endTime
+Old versions retained for audit
 
-price: pricePerUnit
+Price Snapshot in BookingItem
 
-planType (STANDARD/PEAK etc.)
+finalPrice stored permanently
 
-priority (higher wins when overlaps)
+Pricing changes never affect historical bookings
 
-SlotDefinition
+Slot Templates (No Slot Generation)
 
-Key fields:
+SlotDefinition defines recurring slots
 
-slotDefinitionId, facilityId, courtId
+BookingItem represents actual booked instance
 
-Pattern: dayOfWeek OR dayType (WEEKDAY/WEEKEND)
+🚀 Scalability Roadmap
+Phase 1: Modular Monolith (Current)
 
-Time range: startTime, endTime
+Single codebase, separate modules
 
-Effective window: effectiveFrom, effectiveTo, active, replacedBySlotDefId
+Shared DB schema
 
-Linked pricing: pricePlanId
+Phase 2: Schema-per-Service
 
-2.2 Pricing Management Flow (Admin)
-Step 1 — Define Pricing Plan(s)
+Separate DB per module
 
-Admin creates pricing rules for a court.
+Integration via REST
 
-Pricing APIs:
+Phase 3: Event Driven
 
-POST /v1/api/pricing-plans
+Kafka for:
 
-PUT /v1/api/pricing-plans/{pricingPlanId}/deactivate
+Facility → Search index update
 
-GET /v1/api/pricing-plans?courtId={courtId}
+Court → Facility sport projection update
 
-Rules supported:
+Booking → Analytics
 
-Standard pricing plan (applies all day)
+🗂️ Project Structure
+facility/
+pricing/
+booking/
 
-Peak hour pricing (Mon–Fri 18:00–22:00)
+shared/
+  annoation/
+  validation/
+  exception/
+  util/
 
-Weekend pricing
 
-Date-range pricing (festival weeks)
+Each module follows:
 
-Overlaps are resolved by:
+api/
+application/
+domain/
+repository/
+integration/
+util/
 
-priority (higher wins)
+🧪 Tech Stack
 
-tie-breaker: latest created wins (optional policy)
+Java 21
 
-PricingPlan is immutable: updates create new plan and deactivate old.
+Spring Boot
 
-2.3 Slot Definition Flow (Admin)
-Step 2 — Define Slots (templates) for the court
+Spring JDBC
 
-Admin defines slots using SlotDefinition templates.
+PostgreSQL
 
-Slot APIs:
+Elasticsearch
 
-POST /v1/api/slot-definitions
+Kafka (future)
 
-PUT /v1/api/slot-definitions/{slotDefinitionId}/deactivate
+Docker
 
-GET /v1/api/slot-definitions?courtId={courtId}
+Flyway / Liquibase
 
-Each slot definition must:
+✅ Conclusion
 
-define a time range
+This system is designed for:
 
-define a pattern (dayOfWeek OR dayType)
+High concurrency booking
 
-have effectiveFrom/effectiveTo
+Frequent pricing changes
 
-attach a pricePlanId
+Geo-based facility discovery
 
-Price attachment rule
+Microservices-ready extraction
 
-If pricePlanId not provided in slot definition:
+Audit-safe financial correctness
 
-default to STANDARD plan (for that court and effective date)
+The architecture follows enterprise-grade patterns used by Booking.com, OYO, Uber, and airline reservation systems.
 
-2.4 Supported Pricing Types (Fixed + Unit Based)
+✨ Next Enhancements (Planned)
 
-You mentioned 3 types including fixed and unit-based.
+Redis caching for slot availability
 
-Your current entity supports:
+Saga pattern for payment orchestration
 
-Unit-based naturally: pricePerUnit multiplied by slotDuration / minBookingMinutes
+Event sourcing for bookings
 
-To support fixed explicitly, best practice is to add:
+CQRS read model in Elasticsearch
 
-pricingMode = FIXED | UNIT
+Kubernetes deployment manifests
 
-if FIXED: fixedPrice
-
-if UNIT: pricePerUnit
-
-(You can keep backward compatibility by treating FIXED as “unit=1”.)
-
-2.5 Availability API (used by UI)
-
-This service provides the slot list for a given court/date with availability:
-
-API:
-
-GET /v1/api/slots/availability?courtId={courtId}&date={yyyy-mm-dd}
-
-Response includes:
-
-slotDefinitionId
-
-start/end time
-
-pricingPlanId
-
-computed price (for that slot)
-
-available = true/false (derived from Booking reservations)
-
-3) Facility Microservice
-3.1 Responsibilities
-
-Facility service is the “inventory” service for:
-
-Facility onboarding & management
-
-Court management under facility
-
-Fast facility discovery (geo + text + sport filters)
-
-Core Entities
-
-Facility: address, geo, opening/closing, status, sportTypeSupported
-
-Court: sport, minBookingMinutes, timings, status
-
-3.2 Capabilities
-
-Facility APIs:
-
-POST /v1/api/facilities (register facility)
-
-PUT /v1/api/facilities/{facilityId} (update)
-
-DELETE /v1/api/facilities/{facilityId} (soft delete)
-
-GET /v1/api/facilities/{facilityId}
-
-Court APIs:
-
-POST /v1/api/courts (register court)
-
-PUT /v1/api/courts/{courtId}
-
-DELETE /v1/api/courts/{courtId} (soft delete)
-
-GET /v1/api/facilities/{facilityId}/courts
-
-3.3 Fast Querying (Geo + sport type + name)
-
-You mentioned:
-
-index on lat/lon
-
-index on sportTypeSupported
-
-court info indexed
-
-elasticsearch for optimized query
-
-Recommended query design
-
-Elasticsearch for:
-
-facility name search
-
-sport type filter
-
-geo radius search
-
-Postgres indexes for:
-
-admin CRUD
-
-internal joins and consistency
-
-Useful DB indexes
-
-city, status, owner
-
-sportTypeSupported (GIN if array)
-
-geo: PostGIS GiST index (best)
-
-4) Cross-Service Interactions
-Booking → PricingSlots
-
-Booking needs slot pricing and slot validity.
-
-Done via PricingIntegrationService calling pricing application query handler.
-
-Booking → Facility
-
-Booking validates court/facility exist (optional).
-
-Typically via FacilityIntegrationService or cached read model.
-
-5) Patterns Used Across All Services
-Notification Pattern (Structural Validation)
-
-Collect all validation errors
-
-Return 400 with a list of issues
-
-Example codes: name_required, time_range_invalid
-
-Business Validation (Domain Rules)
-
-Throw typed exceptions like:
-
-SlotAlreadyBookedException
-
-CourtAlreadyExistsException
-
-Returned as 409/422 depending on rule
-
-Centralized Exception Handling
-
-Standard API error envelope
-
-Same structure across all services
-
-Query vs Command Handlers (CQRS-style)
-
-Command handlers: mutate state
-
-Query handlers: optimized read DTOs
+Rate limiting & circuit breakers
